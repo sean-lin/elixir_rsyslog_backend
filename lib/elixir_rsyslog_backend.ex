@@ -122,7 +122,6 @@ defmodule Logger.Backends.Rsyslog do
       cache,
       format_event(level, msg, ts, md, state)
     ]
-    IO.inspect(state)
     :gen_udp.send(socket, host, port, packet)
     {:ok, state}
   end

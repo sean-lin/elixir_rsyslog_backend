@@ -25,7 +25,7 @@ defmodule Logger.Backends.Rsyslog do
     def level(_bad), do: 3
   end
 
-  use GenEvent
+  @behaviour :gen_event
   use Bitwise
   require Record
 

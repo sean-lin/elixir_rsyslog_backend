@@ -38,6 +38,7 @@ defmodule Logger.Backends.Rsyslog do
     level: :debug,
     metadata: [],
     format: @default_format,
+    compiled_format: nil,
     host: {127, 0, 0, 1},
     port: 514,
     facility: :local1,
@@ -88,10 +89,8 @@ defmodule Logger.Backends.Rsyslog do
     level = Keyword.get(opts, :level, state(state, :level))
     metadata = Keyword.get(opts, :metadata, state(state, :metadata))
 
-    format =
-      Keyword.get(opts, :format, state(state, :format))
-      |> Logger.Formatter.compile()
-
+    format = Keyword.get(opts, :format, state(state, :format))
+    compiled_format = Logger.Formatter.compile(format)
     host = Keyword.get(opts, :host, state(state, :host))
     port = Keyword.get(opts, :port, state(state, :port))
     facility = Keyword.get(opts, :facility, state(state, :facility))
@@ -103,6 +102,7 @@ defmodule Logger.Backends.Rsyslog do
       level: level,
       metadata: metadata,
       format: format,
+      compiled_format: compiled_format,
       host: host,
       port: port,
       facility: facility,
@@ -139,7 +139,7 @@ defmodule Logger.Backends.Rsyslog do
     {:ok, state}
   end
 
-  defp format_event(level, msg, ts, md, state(format: format, metadata: metadata)) do
+  defp format_event(level, msg, ts, md, state(compiled_format: format, metadata: metadata)) do
     Logger.Formatter.format(format, level, msg, ts, Keyword.take(md, metadata))
   end
 

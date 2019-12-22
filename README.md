@@ -1,5 +1,7 @@
 # Logger.Backends.Rsyslog
 
+[![Hex.pm Version](https://img.shields.io/hexpm/v/elixir_rsyslog_backend.svg?style=flat)](https://hex.pm/packages/elixir_rsyslog_backend)
+
 Logger backend for rsyslog using the Syslog Protocol(rfc5424)
 
 ## Installation

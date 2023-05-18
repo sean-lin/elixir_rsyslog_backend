@@ -39,6 +39,7 @@ defmodule Logger.Backends.Rsyslog do
     metadata: [],
     format: @default_format,
     compiled_format: nil,
+    structured_data: [],
     host: {127, 0, 0, 1},
     port: 514,
     facility: :local1,
@@ -91,6 +92,7 @@ defmodule Logger.Backends.Rsyslog do
 
     format = Keyword.get(opts, :format, state(state, :format))
     compiled_format = Logger.Formatter.compile(format)
+    structured_data =  Keyword.get(opts, :structured_data, state(state, :structured_data))
     host = Keyword.get(opts, :host, state(state, :host))
     port = Keyword.get(opts, :port, state(state, :port))
     facility = Keyword.get(opts, :facility, state(state, :facility))
@@ -103,6 +105,7 @@ defmodule Logger.Backends.Rsyslog do
       metadata: metadata,
       format: format,
       compiled_format: compiled_format,
+      structured_data: structured_data,
       host: host,
       port: port,
       facility: facility,
@@ -139,8 +142,73 @@ defmodule Logger.Backends.Rsyslog do
     {:ok, state}
   end
 
-  defp format_event(level, msg, ts, md, state(compiled_format: format, metadata: metadata)) do
-    Logger.Formatter.format(format, level, msg, ts, Keyword.take(md, metadata))
+  defp format_event(level, msg, ts, md, state(compiled_format: format, structured_data: structured_data, metadata: metadata)) do
+    sd = Enum.map(structured_data, &format_structured_data_element(&1, md))
+    Logger.Formatter.format(format, level, [sd, ?\s, msg], ts, Keyword.take(md, metadata))
+  end
+
+  defp format_structured_data_element({id, params}, metadata) do
+    [ ?[, to_string(id), format_structured_data_param(Keyword.take(metadata, params)), ?] ]
+  end
+
+#  defp format_structured_data(_pen, _structured_data = []), do: "-"
+#
+#  defp format_structured_data(pen, metadata) do
+#    [ "[sd@", Integer.to_string(pen), " ",    "]" ]    
+#  end
+
+  defp format_structured_data_param([]), do: []
+
+  defp format_structured_data_param([{key, value} | params]) do
+    if formatted = format_structured_data_param(key, value) do
+      [ ?\s, to_string(key), ?=, ?", formatted, ?" | format_structured_data_param(params) ]
+    else 
+      []
+    end
+  end
+
+  defp format_structured_data_param(_, nil), do: nil
+  defp format_structured_data_param(_, string) when is_binary(string), do: string
+  defp format_structured_data_param(_, integer) when is_integer(integer), do: Integer.to_string(integer)
+  defp format_structured_data_param(_, float) when is_float(float), do: Float.to_string(float)
+  defp format_structured_data_param(_, pid) when is_pid(pid), do: :erlang.pid_to_list(pid)
+
+  defp format_structured_data_param(_, atom) when is_atom(atom) do
+    case Atom.to_string(atom) do
+      "Elixir." <> rest -> rest
+      "nil" -> ""
+      binary -> binary
+    end
+  end
+
+  defp format_structured_data_param(_, ref) when is_reference(ref) do
+    '#Ref' ++ rest = :erlang.ref_to_list(ref)
+    rest
+  end
+
+  defp format_structured_data_param(:file, file) when is_list(file), do: file
+
+  defp format_structured_data_param(:domain, [head | tail]) when is_atom(head) do
+    Enum.map_intersperse([head | tail], ?., &Atom.to_string/1)
+  end
+
+  defp format_structured_data_param(:mfa, {mod, fun, arity})
+       when is_atom(mod) and is_atom(fun) and is_integer(arity) do
+    Exception.format_mfa(mod, fun, arity)
+  end
+
+  defp format_structured_data_param(:initial_call, {mod, fun, arity})
+       when is_atom(mod) and is_atom(fun) and is_integer(arity) do
+    Exception.format_mfa(mod, fun, arity)
+  end
+
+  defp format_structured_data_param(_, list) when is_list(list), do: nil
+
+  defp format_structured_data_param(_, other) do
+    case String.Chars.impl_for(other) do
+      nil -> nil
+      impl -> impl.to_string(other)
+    end
   end
 
   defp gethost(ip) when is_tuple(ip), do: ip
@@ -177,7 +245,7 @@ defmodule Logger.Backends.Rsyslog do
   defp get_cache(app_name) do
     {:ok, hostname} = :inet.gethostname()
     proc = :os.getpid() |> List.to_string()
-    <<"Z ", List.to_string(hostname)::binary, " ", app_name::binary, " ", proc::binary, " - - ">>
+    <<"Z ", List.to_string(hostname)::binary, " ", app_name::binary, " ", proc::binary, " - ">>
   end
 
   defp pad2(int) when int < 10, do: [?0, int + 48]
